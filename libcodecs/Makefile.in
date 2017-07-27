@@ -1,0 +1,72 @@
+
+# Specify interpreter
+SHELL = /bin/sh
+
+# Note: C++ compiler is specifically used for unitary testing. The 
+# objective is to have a C and C++ testing setting at disposal.
+CPP = c++
+
+INCLUDE_DIR = $(PREFIX)/include
+LIB_DIR = $(PREFIX)/lib
+EXE_DIR=$(PREFIX)/bin
+LIBNAME = codecs
+
+CFLAGS+=-I$(INCLUDE_DIR)
+# 32 /64 bits architecture stuff ...
+LBITS := $(shell getconf LONG_BIT)
+ifeq ($(LBITS),64)
+   # 64 bit stuff here
+   CFLAGS+=-fPIC -D_LARGE_FILE_API -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
+else
+   # 32 bit stuff here
+endif
+
+LIBS=-lm -ldl -lpthread -L$(LIB_DIR) -lmp3lame -lx264 -lavdevice -lavformat \
+	-lavfilter -lavcodec -lswscale -lavutil -lswresample -lutils -lUnitTest++
+
+_OBJ = $(wildcard $(SRCDIR)/*.c)
+OBJ = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(_OBJ))
+
+_OBJ_UTESTS_EXE = $(wildcard $(SRCDIR)/../utests/utests*.c*)
+OBJ_UTESTS_EXE = $(patsubst $(SRCDIR)/../utests/%.c*,$(BUILDDIR)/utests/%.o,$(_OBJ_UTESTS_EXE))
+
+.PHONY : $(SRCDIR) $(BUILDDIR)
+
+all: build
+
+config:
+	@mkdir -p $(PREFIX)
+	@mkdir -p $(INCLUDE_DIR)
+	@mkdir -p $(INCLUDE_DIR)/lib$(LIBNAME)
+	@mkdir -p $(LIB_DIR)
+	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(BUILDDIR)/utests
+
+build: config
+	@if [ ! -f $(LIB_DIR)/lib$(LIBNAME).so ] ; then \
+		$(MAKE) $(BUILDDIR)/lib$(LIBNAME).so; \
+	fi
+	$(MAKE) $(EXE_DIR)/codecs_utests
+	chmod +x $(EXE_DIR)/codecs_utests
+
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+$(BUILDDIR)/lib$(LIBNAME).so: $(OBJ)
+	$(CC) -o $@ $^ -shared -Bdynamic $(CFLAGS) $(LIBS)
+
+#$(LIB_DIR)/lib$(LIBNAME).a: $(OBJ)
+#	ar -rs $@ $^
+
+$(BUILDDIR)/utests/%.o: $(SRCDIR)/../utests/%.c*
+	$(CPP) -c -o $@ $< $(CFLAGS)
+
+$(EXE_DIR)/codecs_utests: $(OBJ_UTESTS_EXE)
+	$(CPP) -o $@ $^ $(CFLAGS) $(LIBS)
+
+install:
+	cp $(BUILDDIR)/lib$(LIBNAME).so $(LIB_DIR)/lib$(LIBNAME).so;
+	cp -a $(SRCDIR)/*.h $(INCLUDE_DIR)/lib$(LIBNAME)/;
+
+clean:
+	rm -rf $(LIB_DIR)/lib$(LIBNAME).so $(INCLUDE_DIR)/lib$(LIBNAME) $(EXE_DIR)/codecs_utests
